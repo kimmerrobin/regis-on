@@ -15,7 +15,7 @@ import {
   UserCheck,
   AlertTriangle,
 } from 'lucide-react';
-import { findBestMatch } from '../utils/faceComparison';
+import { findBestMatch, validateFaceStructure } from '../utils/faceComparison';
 
 export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmployee, onNavigateToScanner }) {
   const [showModal, setShowModal] = useState(false);
@@ -35,6 +35,7 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
   const [stepProgress, setStepProgress] = useState(0);
   const [isFaceCentered, setIsFaceCentered] = useState(false);
   const [shutterFlash, setShutterFlash] = useState(false);
+  const [faceValidationError, setFaceValidationError] = useState(null);
 
   // Reconhecimento de duplicidade / Colaborador existente
   const [existingMatch, setExistingMatch] = useState(null);
@@ -153,12 +154,26 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
     const startX = ((v.videoWidth || 400) - minDim) / 2;
     const startY = ((v.videoHeight || 400) - minDim) / 2;
 
-    // Dispara animação de flash de câmera
+    ctx.drawImage(v, startX, startY, minDim, minDim, 0, 0, 400, 400);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+    // Validação Anti-Fraude Facial Obrigatória: Rejeita teto, piso, parede ou apenas topo da cabeça
+    const faceCheck = await validateFaceStructure(dataUrl);
+    if (!faceCheck.valid) {
+      setFaceValidationError(
+        faceCheck.reason ||
+          'Rosto não identificado no centro da moldura. Enquadre o rosto completo com olhos e nariz visíveis.'
+      );
+      setBioStep('IDLE');
+      setBioMessage('Posicione o rosto inteiro dentro da moldura circular');
+      playBiometricSound('step');
+      return;
+    }
+
+    setFaceValidationError(null);
     setShutterFlash(true);
     setTimeout(() => setShutterFlash(false), 250);
 
-    ctx.drawImage(v, startX, startY, minDim, minDim, 0, 0, 400, 400);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
     setPhotoUrl(dataUrl);
     setBioStep('DONE');
     playBiometricSound('success');
@@ -167,7 +182,7 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
 
     // Reconhecimento anti-duplicidade: Verifica se este rosto já está cadastrado no sistema!
     if (employees && employees.length > 0) {
-      const matchResult = await findBestMatch(dataUrl, employees, 62);
+      const matchResult = await findBestMatch(dataUrl, employees, 70);
       if (matchResult.status === 'RECOGNIZED' && matchResult.match) {
         const found = matchResult.match;
         setExistingMatch(found);
@@ -320,6 +335,7 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
     setStepProgress(0);
     setExistingMatch(null);
     setMatchScore(null);
+    setFaceValidationError(null);
     setIsUpdatingExisting(false);
     setIsUsingCam(true);
     setShowModal(true);
@@ -590,6 +606,16 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
                             <Camera className="w-3.5 h-3.5" />
                             <span>Capturar Agora</span>
                           </button>
+                        </div>
+                      )}
+
+                      {faceValidationError && (
+                        <div className="mt-2 bg-rose-950/80 border-2 border-rose-500/70 rounded-xl p-2.5 text-left flex items-start gap-2 shadow-lg animate-in fade-in">
+                          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-[11px] font-bold text-rose-300">Validação Anti-Fraude Recusada</p>
+                            <p className="text-[10px] text-rose-200/90 leading-tight mt-0.5">{faceValidationError}</p>
+                          </div>
                         </div>
                       )}
                     </div>

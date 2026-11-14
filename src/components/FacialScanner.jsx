@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, CheckCircle2, AlertCircle, RefreshCw, Sparkles, UserCheck, ShieldAlert, SwitchCamera, Search, UserX, UserPlus, SlidersHorizontal } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { findBestMatch, compareFaces } from '../utils/faceComparison';
+import { findBestMatch, compareFaces, validateFaceStructure } from '../utils/faceComparison';
 
 export default function FacialScanner({ trainings, employees, onRegisterAttendance, onNavigateToEmployees }) {
   const [selectedTrainingId, setSelectedTrainingId] = useState(trainings[0]?.id || '');
@@ -136,10 +136,17 @@ export default function FacialScanner({ trainings, employees, onRegisterAttendan
 
     // Modo 1: Reconhecimento Automático (IA procura quem é no banco)
     if (scanMode === 'auto') {
-      const matchResult = await findBestMatch(livePhoto, employees, 65);
+      const matchResult = await findBestMatch(livePhoto, employees, 70);
 
       setTimeout(() => {
-        if (matchResult.status === 'RECOGNIZED' && matchResult.match) {
+        if (matchResult.status === 'NO_FACE') {
+          setLastResult({
+            type: 'NO_FACE',
+            message: matchResult.message,
+            capturedPhoto: livePhoto,
+          });
+          playSound(false);
+        } else if (matchResult.status === 'RECOGNIZED' && matchResult.match) {
           const matchedEmp = matchResult.match;
           const isAlreadyPresent = alreadyAttended.some((a) => a.employeeId === matchedEmp.id);
 
@@ -189,11 +196,26 @@ export default function FacialScanner({ trainings, employees, onRegisterAttendan
         return;
       }
 
+      // Validação anti-fraude antes de comparar
+      const faceCheck = await validateFaceStructure(livePhoto);
+      if (!faceCheck.valid) {
+        setTimeout(() => {
+          setLastResult({
+            type: 'NO_FACE',
+            message: faceCheck.reason,
+            capturedPhoto: livePhoto,
+          });
+          playSound(false);
+          setScanning(false);
+        }, 500);
+        return;
+      }
+
       const score = await compareFaces(targetEmp.photo, livePhoto);
       const scoreFormatted = `${score.toFixed(1)}%`;
 
       setTimeout(() => {
-        if (score >= 60) {
+        if (score >= 70) {
           const isAlreadyPresent = alreadyAttended.some((a) => a.employeeId === targetEmp.id);
 
           if (isAlreadyPresent) {
@@ -663,6 +685,26 @@ export default function FacialScanner({ trainings, employees, onRegisterAttendan
                     </h4>
                     <p className="text-xs text-rose-700 mt-0.5">
                       A biometria na câmera não corresponde ao cadastro selecionado (Similaridade: {lastResult.confidence}).
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* NO_FACE / ANTI-FRAUDE */}
+              {lastResult.type === 'NO_FACE' && (
+                <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 flex items-center gap-3 animate-in fade-in duration-300">
+                  <div className="p-2 bg-amber-100 text-amber-700 rounded-xl shrink-0">
+                    <AlertCircle className="w-6 h-6 text-amber-600" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-amber-900 text-sm">
+                      Validação Anti-Fraude: Rosto Não Detectado!
+                    </h4>
+                    <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                      {lastResult.message || 'Posicione o rosto inteiro dentro da moldura circular com olhos e nariz visíveis.'}
+                    </p>
+                    <p className="text-[11px] text-amber-700 font-medium mt-1">
+                      O sistema rejeita imagens apontadas para o teto, paredes ou apenas parte da cabeça para evitar fraudes.
                     </p>
                   </div>
                 </div>
