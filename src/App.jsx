@@ -78,9 +78,17 @@ export default function App() {
     setActiveTab('scanner');
   };
 
-  // Add employee
+  // Add or update employee
   const handleAddEmployee = (newEmp) => {
-    setEmployees((prev) => [newEmp, ...prev]);
+    setEmployees((prev) => {
+      const idx = prev.findIndex((e) => e.id === newEmp.id || (e.matricula && e.matricula === newEmp.matricula));
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], ...newEmp };
+        return updated;
+      }
+      return [newEmp, ...prev];
+    });
   };
 
   // Delete employee

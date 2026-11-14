@@ -12,7 +12,10 @@ import {
   Eye,
   Scan,
   Zap,
+  UserCheck,
+  AlertTriangle,
 } from 'lucide-react';
+import { findBestMatch } from '../utils/faceComparison';
 
 export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmployee, onNavigateToScanner }) {
   const [showModal, setShowModal] = useState(false);
@@ -26,12 +29,17 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
   const [camError, setCamError] = useState(null);
 
   // Estados da Biometria Guiada (Estilo Banco / Mercado Livre)
-  // 'CENTER' -> 'DISTANCE' -> 'LIVENESS' -> 'CAPTURE' -> 'DONE'
-  const [bioStep, setBioStep] = useState('CENTER');
-  const [bioMessage, setBioMessage] = useState('Centralize seu rosto no centro da moldura');
+  // 'IDLE' (aguardando o usuário clicar em Iniciar) -> 'CENTER' -> 'DISTANCE' -> 'LIVENESS' -> 'CAPTURE' -> 'DONE'
+  const [bioStep, setBioStep] = useState('IDLE');
+  const [bioMessage, setBioMessage] = useState('Posicione o rosto na moldura e clique no botão para iniciar');
   const [stepProgress, setStepProgress] = useState(0);
   const [isFaceCentered, setIsFaceCentered] = useState(false);
   const [shutterFlash, setShutterFlash] = useState(false);
+
+  // Reconhecimento de duplicidade / Colaborador existente
+  const [existingMatch, setExistingMatch] = useState(null);
+  const [matchScore, setMatchScore] = useState(null);
+  const [isUpdatingExisting, setIsUpdatingExisting] = useState(false);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -78,9 +86,13 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
 
   const startModalCamera = async () => {
     setCamError(null);
-    setBioStep('CENTER');
-    setStepProgress(20);
-    setBioMessage('Posicione o rosto dentro da moldura circular');
+    setBioStep('IDLE');
+    setStepProgress(0);
+    setBioMessage('Posicione o rosto dentro do círculo e clique em Iniciar Biometria');
+    setExistingMatch(null);
+    setMatchScore(null);
+    setIsUpdatingExisting(false);
+
     try {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
@@ -120,8 +132,16 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
     }
   };
 
+  // Inicia o fluxo guiado quando o usuário aperta o botão
+  const handleStartGuidedBiometrics = () => {
+    setBioStep('CENTER');
+    setStepProgress(25);
+    setBioMessage('1. Centralize seu rosto no centro da moldura');
+    playBiometricSound('step');
+  };
+
   // Captura o crop quadrado facial central padronizado (400x400)
-  const takeSelfieSnapshot = () => {
+  const takeSelfieSnapshot = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     const canvas = canvasRef.current;
     canvas.width = 400;
@@ -144,9 +164,31 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
     playBiometricSound('success');
     stopModalCamera();
     setIsUsingCam(false);
+
+    // Reconhecimento anti-duplicidade: Verifica se este rosto já está cadastrado no sistema!
+    if (employees && employees.length > 0) {
+      const matchResult = await findBestMatch(dataUrl, employees, 62);
+      if (matchResult.status === 'RECOGNIZED' && matchResult.match) {
+        const found = matchResult.match;
+        setExistingMatch(found);
+        setMatchScore(matchResult.confidence);
+        setIsUpdatingExisting(true);
+
+        // Preenche automaticamente o formulário com os dados cadastrados
+        setName(found.name);
+        setCpf(found.cpf || '');
+        setRole(found.role || 'Colaborador');
+        setDepartment(found.department || 'Geral');
+        setMatricula(found.matricula);
+      } else {
+        setExistingMatch(null);
+        setMatchScore(null);
+        setIsUpdatingExisting(false);
+      }
+    }
   };
 
-  // Loop de Visão Computacional para Guia Biométrico Inteligente
+  // Loop de Visão Computacional para Guia Biométrico
   useEffect(() => {
     if (!showModal || !isUsingCam || photoUrl) return;
 
@@ -194,16 +236,15 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
 
         setIsFaceCentered(hasGoodSubject);
 
-        // Transições Inteligentes entre Etapas da Biometria
+        // Se o processo guiado foi iniciado pelo usuário (não está em IDLE)
         if (currentStepLocal === 'CENTER') {
           if (hasGoodSubject) {
             stableFrames++;
             if (stableFrames > 12) {
-              // Rosto centralizado por ~400ms: Avança para etapa 2
               currentStepLocal = 'DISTANCE';
               setBioStep('DISTANCE');
-              setStepProgress(45);
-              setBioMessage('Aproxime suavemente o rosto da câmera');
+              setStepProgress(50);
+              setBioMessage('2. Aproxime suavemente o rosto da câmera');
               playBiometricSound('step');
               stableFrames = 0;
             }
@@ -213,16 +254,14 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
         } else if (currentStepLocal === 'DISTANCE') {
           stableFrames++;
           if (stableFrames > 22) {
-            // Distância ajustada: Avança para etapa 3 (Liveness / Movimento)
             currentStepLocal = 'LIVENESS';
             setBioStep('LIVENESS');
-            setStepProgress(70);
-            setBioMessage('Vire levemente o rosto ou pisque os olhos');
+            setStepProgress(75);
+            setBioMessage('3. Vire levemente o rosto ou pisque os olhos');
             playBiometricSound('step');
             stableFrames = 0;
           }
         } else if (currentStepLocal === 'LIVENESS') {
-          // Detecta movimento óptico (diferença entre frames)
           let delta = 0;
           if (lastFrameDataRef.current) {
             for (let i = 0; i < data.length; i += 8) {
@@ -231,17 +270,16 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
           }
           lastFrameDataRef.current = new Uint8ClampedArray(data);
 
-          if (delta > 1200 || stableFrames > 20) {
+          if (delta > 1200 || stableFrames > 22) {
             currentStepLocal = 'CAPTURE';
             setBioStep('CAPTURE');
             setStepProgress(95);
-            setBioMessage('Mantenha o rosto parado para captura biométrica...');
+            setBioMessage('Validando biometria... Mantenha a posição');
             playBiometricSound('step');
 
-            // Countdown suave para captura automática
             stepTimerRef.current = setTimeout(() => {
               takeSelfieSnapshot();
-            }, 1000);
+            }, 900);
           } else {
             stableFrames++;
           }
@@ -278,8 +316,11 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
     setDepartment('');
     setMatricula(`COLAB-${Math.floor(1000 + Math.random() * 9000)}`);
     setPhotoUrl('');
-    setBioStep('CENTER');
-    setStepProgress(25);
+    setBioStep('IDLE');
+    setStepProgress(0);
+    setExistingMatch(null);
+    setMatchScore(null);
+    setIsUpdatingExisting(false);
     setIsUsingCam(true);
     setShowModal(true);
   };
@@ -292,16 +333,16 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
     }
 
     if (!photoUrl) {
-      alert('Por favor, realize a captura da biometria facial.');
+      alert('Por favor, realize a captura da biometria facial antes de salvar.');
       return;
     }
 
     const newEmp = {
-      id: `emp-${Date.now()}`,
+      id: existingMatch && isUpdatingExisting ? existingMatch.id : `emp-${Date.now()}`,
       name: name.trim(),
       cpf: cpf.trim() || '000.000.000-00',
       role: role.trim() || 'Colaborador',
-      department: department.trim() || 'Operações',
+      department: department.trim() || 'Geral',
       matricula: matricula.trim(),
       photo: photoUrl,
       registeredAt: new Date().toISOString(),
@@ -420,7 +461,7 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
                 </span>
                 <div>
                   <h2 className="text-base font-bold text-slate-900">Cadastro de Biometria Facial</h2>
-                  <p className="text-[11px] text-slate-500">Validação guiada com prova de vida e enquadramento</p>
+                  <p className="text-[11px] text-slate-500">Validação e verificação com prova de vida</p>
                 </div>
               </div>
 
@@ -445,74 +486,112 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
                 )}
 
                 {isUsingCam ? (
-                  <div className="relative aspect-square max-w-[280px] mx-auto bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center border-2 border-violet-800/40">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover mirror scale-x-[-1]"
-                    />
+                  <div>
+                    <div className="relative aspect-square max-w-[280px] mx-auto bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center border-2 border-violet-800/40">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover mirror scale-x-[-1]"
+                      />
 
-                    {/* HUD Biométrico Interativo (Círculo de Retículo e Progresso) */}
-                    <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-between p-3">
-                      {/* Top Step Pill */}
-                      <div className="flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full border border-violet-500/40 text-[11px] font-bold text-violet-300">
-                        {bioStep === 'CENTER' && <span>Etapa 1/3 • Enquadramento</span>}
-                        {bioStep === 'DISTANCE' && <span>Etapa 2/3 • Distância Ideal</span>}
-                        {bioStep === 'LIVENESS' && <span>Etapa 3/3 • Prova de Vida</span>}
-                        {bioStep === 'CAPTURE' && <span className="text-emerald-400">Validando Biometria...</span>}
-                      </div>
+                      {/* HUD Biométrico Interativo (Círculo de Retículo e Progresso) */}
+                      <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-between p-3">
+                        {/* Top Step Pill */}
+                        <div className="flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full border border-violet-500/40 text-[11px] font-bold text-violet-300">
+                          {bioStep === 'IDLE' && <span>Câmera Pronta • Enquadre seu rosto</span>}
+                          {bioStep === 'CENTER' && <span>Etapa 1/3 • Enquadramento</span>}
+                          {bioStep === 'DISTANCE' && <span>Etapa 2/3 • Distância Ideal</span>}
+                          {bioStep === 'LIVENESS' && <span>Etapa 3/3 • Prova de Vida</span>}
+                          {bioStep === 'CAPTURE' && <span className="text-emerald-400">Validando Biometria...</span>}
+                        </div>
 
-                      {/* Moldura Circular com Feedback Visual */}
-                      <div className="relative w-44 h-44 flex items-center justify-center">
-                        {/* SVG Progress Ring */}
-                        <svg className="absolute inset-0 w-full h-full -rotate-90">
-                          <circle
-                            cx="88"
-                            cy="88"
-                            r="80"
-                            stroke="rgba(139, 92, 246, 0.2)"
-                            strokeWidth="4"
-                            fill="transparent"
-                          />
-                          <circle
-                            cx="88"
-                            cy="88"
-                            r="80"
-                            stroke={isFaceCentered ? '#10b981' : '#8b5cf6'}
-                            strokeWidth="4"
-                            strokeDasharray={502}
-                            strokeDashoffset={502 - (502 * stepProgress) / 100}
-                            strokeLinecap="round"
-                            fill="transparent"
-                            className="transition-all duration-300"
-                          />
-                        </svg>
+                        {/* Moldura Circular com Feedback Visual */}
+                        <div className="relative w-44 h-44 flex items-center justify-center">
+                          {/* SVG Progress Ring */}
+                          <svg className="absolute inset-0 w-full h-full -rotate-90">
+                            <circle
+                              cx="88"
+                              cy="88"
+                              r="80"
+                              stroke="rgba(139, 92, 246, 0.2)"
+                              strokeWidth="4"
+                              fill="transparent"
+                            />
+                            <circle
+                              cx="88"
+                              cy="88"
+                              r="80"
+                              stroke={isFaceCentered ? '#10b981' : '#8b5cf6'}
+                              strokeWidth="4"
+                              strokeDasharray={502}
+                              strokeDashoffset={502 - (502 * stepProgress) / 100}
+                              strokeLinecap="round"
+                              fill="transparent"
+                              className="transition-all duration-300"
+                            />
+                          </svg>
 
-                        {/* Moldura Central */}
-                        <div
-                          className={`w-36 h-44 rounded-[40px] border-2 transition-all duration-300 flex items-center justify-center ${
-                            isFaceCentered
-                              ? 'border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
-                              : 'border-dashed border-violet-400/80 shadow-[0_0_15px_rgba(139,92,246,0.2)]'
-                          }`}
-                        >
-                          {/* Laser Scanning Line */}
-                          <div className="absolute left-6 right-6 h-0.5 bg-gradient-to-r from-transparent via-violet-400 to-transparent shadow-[0_0_8px_#a855f7] animate-pulse" />
+                          {/* Moldura Central */}
+                          <div
+                            className={`w-36 h-44 rounded-[40px] border-2 transition-all duration-300 flex items-center justify-center ${
+                              isFaceCentered
+                                ? 'border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
+                                : 'border-dashed border-violet-400/80 shadow-[0_0_15px_rgba(139,92,246,0.2)]'
+                            }`}
+                          >
+                            {/* Laser Scanning Line */}
+                            <div className="absolute left-6 right-6 h-0.5 bg-gradient-to-r from-transparent via-violet-400 to-transparent shadow-[0_0_8px_#a855f7] animate-pulse" />
+                          </div>
+                        </div>
+
+                        {/* Mensagem Inferior Dinâmica */}
+                        <div className="bg-black/75 backdrop-blur-md px-3 py-1.5 rounded-xl border border-violet-500/30 text-center max-w-[90%]">
+                          <p
+                            className={`text-[11px] font-semibold transition-colors ${
+                              isFaceCentered ? 'text-emerald-300' : 'text-violet-200'
+                            }`}
+                          >
+                            {bioMessage}
+                          </p>
                         </div>
                       </div>
+                    </div>
 
-                      {/* Mensagem Inferior Dinâmica */}
-                      <div className="bg-black/75 backdrop-blur-md px-3 py-1.5 rounded-xl border border-violet-500/30 text-center max-w-[90%]">
-                        <p
-                          className={`text-[11px] font-semibold transition-colors ${
-                            isFaceCentered ? 'text-emerald-300' : 'text-violet-200'
-                          }`}
-                        >
-                          {bioMessage}
-                        </p>
-                      </div>
+                    {/* Botões de Ação na Câmera */}
+                    <div className="mt-3 space-y-2">
+                      {bioStep === 'IDLE' ? (
+                        <div className="flex flex-col sm:flex-row items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleStartGuidedBiometrics}
+                            className="flex-1 w-full py-2.5 bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-violet-600/30 flex items-center justify-center gap-2 transition-all"
+                          >
+                            <Sparkles className="w-4 h-4 text-violet-200" />
+                            <span>Iniciar Captura Biométrica</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => takeSelfieSnapshot()}
+                            className="py-2.5 px-3 bg-violet-950/60 hover:bg-violet-900 text-violet-300 hover:text-white rounded-xl text-xs font-semibold border border-violet-700/50 transition-all shrink-0"
+                          >
+                            Captura Direta
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2 px-1">
+                          <p className="text-[10px] text-violet-300/80 animate-pulse">Siga as instruções na moldura...</p>
+                          <button
+                            type="button"
+                            onClick={() => takeSelfieSnapshot()}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-violet-600/30 transition-all shrink-0"
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                            <span>Capturar Agora</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -528,15 +607,50 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
                       </div>
                     </div>
 
-                    <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-2.5 max-w-xs mx-auto mb-2">
-                      <p className="text-[11px] font-bold text-emerald-300 flex items-center justify-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                        Biometria Facial Validada com Sucesso!
-                      </p>
-                      <p className="text-[10px] text-emerald-200/80 mt-0.5">
-                        Assinatura biométrica de 128 pontos faciais criptografada localmente.
-                      </p>
-                    </div>
+                    {/* Alerta de Rosto Já Reconhecido (Anti-Duplicidade) */}
+                    {existingMatch ? (
+                      <div className="bg-amber-950/70 border-2 border-amber-500/80 rounded-2xl p-3 text-left max-w-sm mx-auto mb-3 shadow-lg">
+                        <div className="flex items-start gap-2.5">
+                          <div className="p-1.5 bg-amber-500/20 text-amber-400 rounded-xl mt-0.5">
+                            <UserCheck className="w-5 h-5 text-amber-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-extrabold text-amber-300 text-xs">
+                                Rosto Já Reconhecido no RegisON!
+                              </h4>
+                              <span className="text-[10px] bg-amber-400 text-slate-950 font-bold px-1.5 py-0.2 rounded-full">
+                                Match {matchScore}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-amber-200 mt-1 leading-snug">
+                              Identificamos que você é o colaborador <strong>{existingMatch.name}</strong> (Matrícula: {existingMatch.matricula}).
+                            </p>
+                            <div className="mt-2 flex items-center gap-2">
+                              <label className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isUpdatingExisting}
+                                  onChange={(e) => setIsUpdatingExisting(e.target.checked)}
+                                  className="rounded border-amber-400 text-amber-500 focus:ring-amber-400"
+                                />
+                                <span>Atualizar foto deste colaborador</span>
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-2.5 max-w-xs mx-auto mb-2">
+                        <p className="text-[11px] font-bold text-emerald-300 flex items-center justify-center gap-1.5">
+                          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                          Nova Biometria Facial Validada!
+                        </p>
+                        <p className="text-[10px] text-emerald-200/80 mt-0.5">
+                          Assinatura biométrica de 128 pontos faciais criptografada localmente.
+                        </p>
+                      </div>
+                    )}
 
                     <div>
                       <button
@@ -545,24 +659,9 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
                         className="flex items-center gap-1.5 text-xs font-bold text-violet-300 bg-violet-900/40 hover:bg-violet-900/60 px-3 py-1.5 rounded-xl transition-all mx-auto border border-violet-700/50"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
-                        <span>Refazer Biometria</span>
+                        <span>Tirar Nova Foto / Refazer</span>
                       </button>
                     </div>
-                  </div>
-                )}
-
-                {/* Botões de Ação na Câmera */}
-                {isUsingCam && (
-                  <div className="mt-3 flex items-center justify-between gap-2 px-1">
-                    <p className="text-[10px] text-violet-300/80">Siga as instruções ou clique para capturar direto:</p>
-                    <button
-                      type="button"
-                      onClick={takeSelfieSnapshot}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-violet-600/30 transition-all shrink-0"
-                    >
-                      <Camera className="w-3.5 h-3.5" />
-                      <span>Capturar Agora</span>
-                    </button>
                   </div>
                 )}
 
@@ -650,7 +749,11 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
                   className="px-5 py-2.5 text-xs font-bold bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl shadow-md shadow-violet-600/30 transition-all flex items-center gap-1.5"
                 >
                   <CheckCircle className="w-4 h-4" />
-                  <span>Salvar Colaborador & Face</span>
+                  <span>
+                    {existingMatch && isUpdatingExisting
+                      ? 'Atualizar Foto do Colaborador'
+                      : 'Salvar Colaborador & Face'}
+                  </span>
                 </button>
               </div>
             </form>
