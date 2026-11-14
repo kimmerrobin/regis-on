@@ -92,16 +92,22 @@ export default function FacialScanner({ trainings, employees, onRegisterAttendan
     setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
   };
 
-  // Capture frame
+  // Capture frame normalizado central focado na face (400x400)
   const captureFrame = () => {
     if (!videoRef.current || !canvasRef.current) return null;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    const vW = video.videoWidth || 640;
+    const vH = video.videoHeight || 480;
+    const minDim = Math.min(vW, vH);
+    const startX = (vW - minDim) / 2;
+    const startY = (vH - minDim) / 2;
+
+    canvas.width = 400;
+    canvas.height = 400;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.85);
+    ctx.drawImage(video, startX, startY, minDim, minDim, 0, 0, 400, 400);
+    return canvas.toDataURL('image/jpeg', 0.9);
   };
 
   // Perform Face Scan and Matching against database
@@ -130,7 +136,7 @@ export default function FacialScanner({ trainings, employees, onRegisterAttendan
 
     // Modo 1: Reconhecimento Automático (IA procura quem é no banco)
     if (scanMode === 'auto') {
-      const matchResult = await findBestMatch(livePhoto, employees, 70);
+      const matchResult = await findBestMatch(livePhoto, employees, 65);
 
       setTimeout(() => {
         if (matchResult.status === 'RECOGNIZED' && matchResult.match) {
@@ -141,7 +147,7 @@ export default function FacialScanner({ trainings, employees, onRegisterAttendan
             setLastResult({
               type: 'ALREADY_PRESENT',
               employee: matchedEmp,
-              confidence: matchResult.confidence + '%',
+              confidence: matchResult.confidence,
             });
             playSound(false);
           } else {
@@ -151,8 +157,8 @@ export default function FacialScanner({ trainings, employees, onRegisterAttendan
               cpf: matchedEmp.cpf,
               matricula: matchedEmp.matricula,
               registeredAt: new Date().toISOString(),
-              method: 'Reconhecimento Facial (IA)',
-              confidence: matchResult.confidence + '%',
+              method: 'Reconhecimento Facial (IA RegisON)',
+              confidence: matchResult.confidence,
               capturedPhoto: livePhoto,
             };
 
@@ -167,13 +173,13 @@ export default function FacialScanner({ trainings, employees, onRegisterAttendan
         } else {
           setLastResult({
             type: 'NOT_FOUND',
-            confidence: matchResult.confidence + '%',
+            confidence: matchResult.confidence,
             capturedPhoto: livePhoto,
           });
           playSound(false);
         }
         setScanning(false);
-      }, 1000);
+      }, 900);
     } else {
       // Modo 2: Verificação Nominal (Confere se a pessoa na câmera é quem foi selecionado)
       const targetEmp = employees.find((e) => e.id === targetEmployeeId);
@@ -183,17 +189,18 @@ export default function FacialScanner({ trainings, employees, onRegisterAttendan
         return;
       }
 
-      const score = await compareFaces(livePhoto, targetEmp.photo);
+      const score = await compareFaces(targetEmp.photo, livePhoto);
+      const scoreFormatted = `${score.toFixed(1)}%`;
 
       setTimeout(() => {
-        if (score >= 68) {
+        if (score >= 60) {
           const isAlreadyPresent = alreadyAttended.some((a) => a.employeeId === targetEmp.id);
 
           if (isAlreadyPresent) {
             setLastResult({
               type: 'ALREADY_PRESENT',
               employee: targetEmp,
-              confidence: score + '%',
+              confidence: scoreFormatted,
             });
             playSound(false);
           } else {
@@ -203,8 +210,8 @@ export default function FacialScanner({ trainings, employees, onRegisterAttendan
               cpf: targetEmp.cpf,
               matricula: targetEmp.matricula,
               registeredAt: new Date().toISOString(),
-              method: 'Verificação Facial Direta',
-              confidence: score + '%',
+              method: 'Validação Facial Nominal (RegisON)',
+              confidence: scoreFormatted,
               capturedPhoto: livePhoto,
             };
 
@@ -220,13 +227,13 @@ export default function FacialScanner({ trainings, employees, onRegisterAttendan
           setLastResult({
             type: 'MISMATCH',
             expected: targetEmp,
-            confidence: score + '%',
+            confidence: scoreFormatted,
             capturedPhoto: livePhoto,
           });
           playSound(false);
         }
         setScanning(false);
-      }, 1000);
+      }, 900);
     }
   };
 
