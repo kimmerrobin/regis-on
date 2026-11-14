@@ -9,25 +9,49 @@ import { initialTrainings, initialEmployees } from './data/mockData';
 
 export default function App() {
   const [trainings, setTrainings] = useState(() => {
-    const saved = localStorage.getItem('presencabio_trainings');
-    return saved ? JSON.parse(saved) : initialTrainings;
+    const saved = localStorage.getItem('regison_trainings_v3');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Remove ficticios antigos se houver
+        return parsed.map((t) => ({
+          ...t,
+          attendees: (t.attendees || []).filter((a) => !a.employeeId?.startsWith('emp-')),
+        }));
+      } catch {
+        return initialTrainings;
+      }
+    }
+    return initialTrainings;
   });
 
   const [employees, setEmployees] = useState(() => {
-    const saved = localStorage.getItem('presencabio_employees');
-    return saved ? JSON.parse(saved) : initialEmployees;
+    const saved = localStorage.getItem('regison_employees_v3');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Se continha os colaboradores ficticios do mock anterior (emp-1, emp-2, etc.), limpa!
+        const cleaned = parsed.filter((e) => !e.id?.startsWith('emp-'));
+        return cleaned;
+      } catch {
+        return [];
+      }
+    }
+    // Remove localStorage antigo se existir
+    localStorage.removeItem('presencabio_employees');
+    localStorage.removeItem('presencabio_trainings');
+    return [];
   });
 
-  // Default to 'employees' so user can register their face first!
   const [activeTab, setActiveTab] = useState('employees');
   const [isNewTrainingOpen, setIsNewTrainingOpen] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem('presencabio_trainings', JSON.stringify(trainings));
+    localStorage.setItem('regison_trainings_v3', JSON.stringify(trainings));
   }, [trainings]);
 
   useEffect(() => {
-    localStorage.setItem('presencabio_employees', JSON.stringify(employees));
+    localStorage.setItem('regison_employees_v3', JSON.stringify(employees));
   }, [employees]);
 
   // Register attendance for an employee
@@ -61,7 +85,7 @@ export default function App() {
 
   // Delete employee
   const handleDeleteEmployee = (empId) => {
-    if (confirm('Deseja excluir este colaborador da base?')) {
+    if (confirm('Deseja excluir este colaborador?')) {
       setEmployees((prev) => prev.filter((e) => e.id !== empId));
     }
   };
@@ -106,14 +130,13 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="print:hidden border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-500">
+      <footer className="print:hidden border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p>
-            <strong>RegisON</strong> • Sua presença registrada em segundos
+            <strong>RegisON</strong> • Registro Digital de Presença por Reconhecimento Facial
           </p>
-
           <p className="text-[11px] text-slate-400">
-            Solução Digital para Treinamentos com Reconhecimento Facial • LGPD & NRs
+            Conforme diretrizes das NRs e LGPD
           </p>
         </div>
       </footer>

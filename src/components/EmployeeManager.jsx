@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Users, UserPlus, Camera, Trash2, CheckCircle, ShieldCheck, RefreshCw, AlertCircle, ArrowRight } from 'lucide-react';
+import { Users, UserPlus, Camera, Trash2, CheckCircle, ShieldCheck, RefreshCw } from 'lucide-react';
 
 export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmployee, onNavigateToScanner }) {
   const [showModal, setShowModal] = useState(false);
@@ -9,7 +9,7 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
   const [department, setDepartment] = useState('');
   const [matricula, setMatricula] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
-  const [isUsingCam, setIsUsingCam] = useState(true); // Open camera by default on modal!
+  const [isUsingCam, setIsUsingCam] = useState(true);
   const [camError, setCamError] = useState(null);
 
   const videoRef = useRef(null);
@@ -33,7 +33,7 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
       setIsUsingCam(true);
     } catch (err) {
       console.error('Camera error:', err);
-      setCamError('Câmera indisponível. Verifique as permissões.');
+      setCamError('Câmera indisponível. Verifique as permissões do navegador.');
       setIsUsingCam(false);
     }
   };
@@ -63,7 +63,6 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
     canvas.height = 400;
     const ctx = canvas.getContext('2d');
 
-    // Corta e centraliza o quadrado da foto
     const v = videoRef.current;
     const minDim = Math.min(v.videoWidth || 400, v.videoHeight || 400);
     const startX = ((v.videoWidth || 400) - minDim) / 2;
@@ -95,7 +94,7 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
     }
 
     if (!photoUrl) {
-      alert('Por favor, tire uma foto do rosto para registrar a biometria facial.');
+      alert('Por favor, capture a foto facial pela câmera.');
       return;
     }
 
@@ -103,8 +102,8 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
       id: `emp-${Date.now()}`,
       name,
       cpf: cpf || '000.000.000-00',
-      role: role || 'Operador / Colaborador',
-      department: department || 'Operação',
+      role: role || 'Colaborador',
+      department: department || 'Geral',
       matricula,
       photo: photoUrl,
       registeredAt: new Date().toISOString(),
@@ -119,45 +118,26 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* Top Banner */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+      {/* Top Header & Action */}
+      <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="p-1.5 bg-violet-100 text-violet-800 rounded-lg">
+            <span className="p-2 bg-violet-100 text-violet-800 rounded-xl">
               <Users className="w-5 h-5 text-violet-600" />
             </span>
-            <h2 className="text-xl font-bold text-slate-900">Banco de Colaboradores RegisON</h2>
+            <h1 className="text-xl font-bold text-slate-900">Colaboradores Cadastrados</h1>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Cadastre os colaboradores com foto biométrica para identificação automática pela câmera.
+            Total de colaboradores na base: <strong className="text-slate-800">{employees.length}</strong>. Apenas pessoas cadastradas aqui serão reconhecidas na chamada facial.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleOpenModal}
-            className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition-all shadow-md shadow-violet-600/30"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Cadastrar Colaborador (com Câmera)</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Guide Banner */}
-      <div className="bg-gradient-to-r from-violet-50 via-purple-50 to-indigo-50 border border-violet-200 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-violet-600 text-white rounded-xl font-bold text-xs">PASSO 1</div>
-          <p className="text-xs text-violet-950">
-            <strong>Cadastre seu próprio rosto primeiro!</strong> Clique no botão acima, capture sua selfie pela câmera e digite seu nome. Depois, vá para o Totem e teste o reconhecimento automático!
-          </p>
-        </div>
         <button
-          onClick={onNavigateToScanner}
-          className="flex items-center gap-1 text-xs font-bold text-violet-700 hover:text-violet-800 shrink-0 self-end sm:self-center"
+          onClick={handleOpenModal}
+          className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition-all shadow-md shadow-violet-600/30"
         >
-          <span>Ir para a Chamada</span>
-          <ArrowRight className="w-4 h-4" />
+          <UserPlus className="w-4 h-4" />
+          <span>Cadastrar Colaborador</span>
         </button>
       </div>
 
@@ -166,9 +146,9 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
         {employees.length === 0 ? (
           <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-dashed border-slate-300">
             <Users className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-            <h3 className="font-bold text-slate-700 text-base">Nenhum funcionário cadastrado</h3>
+            <h3 className="font-bold text-slate-700 text-base">Nenhum colaborador cadastrado</h3>
             <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-              Cadastre o primeiro colaborador tirando uma foto com a câmera para começar os testes biométricos.
+              Cadastre um colaborador utilizando a câmera para que ele seja identificado na chamada facial.
             </p>
             <button
               onClick={handleOpenModal}
@@ -236,7 +216,7 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-8">
             <h3 className="text-lg font-bold text-slate-900 mb-1">Cadastrar Colaborador & Biometria</h3>
             <p className="text-xs text-slate-500 mb-4">
-              Posicione o rosto na câmera para registrar a foto de referência no RegisON.
+              Posicione o rosto na câmera para registrar a foto de referência.
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -378,4 +358,3 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
     </div>
   );
 }
-
