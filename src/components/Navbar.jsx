@@ -49,7 +49,7 @@ export default function Navbar({ activeTab, setActiveTab, onOpenNewTraining }) {
   return (
     <>
       {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-[#161130] border-b border-violet-900/40 text-white shadow-xl w-full">
+      <header className="sticky top-0 z-40 bg-[#161130] border-b border-violet-900/40 text-white shadow-xl w-full safe-area-top">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
             {/* Logo & Branding */}
@@ -119,7 +119,7 @@ export default function Navbar({ activeTab, setActiveTab, onOpenNewTraining }) {
       </header>
 
       {/* Mobile Bottom Navigation Bar (Fixed at bottom on phones, like native apps!) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#161130]/95 backdrop-blur-md border-t border-violet-900/40 shadow-2xl safe-area-bottom">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#161130] border-t border-violet-900/40 shadow-2xl safe-area-bottom">
         <div className="grid grid-cols-4 items-center h-16 px-1">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -139,7 +139,7 @@ export default function Navbar({ activeTab, setActiveTab, onOpenNewTraining }) {
                     className={`w-10 h-10 -mt-4 rounded-full flex items-center justify-center shadow-lg transition-transform ${
                       isActive
                         ? 'bg-gradient-to-tr from-violet-600 via-indigo-600 to-purple-500 text-white scale-110 shadow-violet-600/40 border-2 border-white'
-                        : 'bg-violet-900/90 text-violet-200 border border-violet-500/40'
+                        : 'bg-violet-900 text-violet-200 border border-violet-500/40'
                     }`}
                   >
                     <Icon className="w-5 h-5" />
@@ -158,8 +158,8 @@ export default function Navbar({ activeTab, setActiveTab, onOpenNewTraining }) {
 
       {/* iOS Install Instruction Modal */}
       {showIosModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#1a1438] text-white border border-violet-500/30 rounded-3xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-slate-950/85 flex items-center justify-center p-4">
+          <div className="bg-[#161130] text-white border border-violet-500/40 rounded-3xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95">
             <div className="flex justify-between items-center mb-4">
               <div className="flex items-center gap-2">
                 <Smartphone className="w-5 h-5 text-violet-400" />
