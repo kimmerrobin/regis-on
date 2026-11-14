@@ -575,37 +575,23 @@ export default function EmployeeManager({ employees, onAddEmployee, onDeleteEmpl
                       </div>
                     </div>
 
-                    {/* Botões de Ação na Câmera */}
+                    {/* Botão de Ação na Câmera */}
                     <div className="mt-3 space-y-2">
                       {bioStep === 'IDLE' ? (
-                        <div className="flex flex-col sm:flex-row items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={handleStartGuidedBiometrics}
-                            className="flex-1 w-full py-2.5 bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-violet-600/30 flex items-center justify-center gap-2 transition-all"
-                          >
-                            <Sparkles className="w-4 h-4 text-violet-200" />
-                            <span>Iniciar Captura Biométrica</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => takeSelfieSnapshot()}
-                            className="py-2.5 px-3 bg-violet-950/60 hover:bg-violet-900 text-violet-300 hover:text-white rounded-xl text-xs font-semibold border border-violet-700/50 transition-all shrink-0"
-                          >
-                            Captura Direta
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={handleStartGuidedBiometrics}
+                          className="w-full py-3 bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-violet-600/30 flex items-center justify-center gap-2 transition-all"
+                        >
+                          <Sparkles className="w-4 h-4 text-violet-200" />
+                          <span>Iniciar Validação Biométrica</span>
+                        </button>
                       ) : (
-                        <div className="flex items-center justify-between gap-2 px-1">
-                          <p className="text-[10px] text-violet-300/80 animate-pulse">Siga as instruções na moldura...</p>
-                          <button
-                            type="button"
-                            onClick={() => takeSelfieSnapshot()}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-violet-600/30 transition-all shrink-0"
-                          >
-                            <Camera className="w-3.5 h-3.5" />
-                            <span>Capturar Agora</span>
-                          </button>
+                        <div className="flex items-center justify-center p-2.5 bg-violet-950/40 rounded-xl border border-violet-800/30">
+                          <p className="text-[11px] text-violet-200 font-medium animate-pulse flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-violet-400 animate-ping" />
+                            Validação em andamento. Siga as instruções na tela...
+                          </p>
                         </div>
                       )}
 
