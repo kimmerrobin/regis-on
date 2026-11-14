@@ -98,7 +98,7 @@ export default function App() {
         onOpenNewTraining={() => setIsNewTrainingOpen(true)}
       />
 
-      <main className="flex-1">
+      <main className="flex-1 pb-24 md:pb-6">
         {activeTab === 'employees' && (
           <EmployeeManager
             employees={employees}
